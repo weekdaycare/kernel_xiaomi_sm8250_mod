@@ -20,8 +20,6 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-
-
 if [ ! -d $TOOLCHAIN_PATH ]; then
     echo "TOOLCHAIN_PATH [$TOOLCHAIN_PATH] does not exist."
     echo "Please ensure the toolchain is there, or change TOOLCHAIN_PATH in the script to your toolchain path."
@@ -29,15 +27,9 @@ if [ ! -d $TOOLCHAIN_PATH ]; then
 fi
 
 echo "TOOLCHAIN_PATH: [$TOOLCHAIN_PATH]"
-export PATH="$TOOLCHAIN_PATH:$PATH"
 
-if ! command -v aarch64-linux-gnu-ld >/dev/null 2>&1; then
-    echo "[aarch64-linux-gnu-ld] does not exist, please check your environment."
-    exit 1
-fi
-
-if ! command -v arm-linux-gnueabi-ld >/dev/null 2>&1; then
-    echo "[arm-linux-gnueabi-ld] does not exist, please check your environment."
+if [ ! -f "$TOOLCHAIN_PATH/clang" ]; then
+    echo "ERROR: $TOOLCHAIN_PATH/clang not found!"
     exit 1
 fi
 
@@ -55,8 +47,12 @@ export PATH="/usr/lib/ccache:$PATH"
 echo "CCACHE_DIR: [$CCACHE_DIR]"
 
 
-MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
-
+MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out \
+  CC=$TOOLCHAIN_PATH/clang \
+  CROSS_COMPILE=$TOOLCHAIN_PATH/aarch64-linux-gnu- \
+  CROSS_COMPILE_ARM32=$TOOLCHAIN_PATH/arm-linux-gnueabi- \
+  CROSS_COMPILE_COMPAT=$TOOLCHAIN_PATH/arm-linux-gnueabi- \
+  CLANG_TRIPLE=aarch64-linux-gnu-"
 
 if [ "$1" == "j1" ]; then
     make $MAKE_ARGS -j1
