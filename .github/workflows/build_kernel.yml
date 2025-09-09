@@ -1,0 +1,123 @@
+name: Build AK3 Kernel Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_device:
+        description: 'Target device (目标设备)'
+        required: true
+        type: choice
+        options:
+          - 'umi'
+          - 'cmi'
+          - 'cas'
+          - 'thyme'
+          - 'munch'
+          - 'dagu'
+          - 'elish'
+          - 'enuma'
+          - 'alioth'
+          - 'apollo'
+          - 'lmi'
+          - 'psyche'
+          - 'pipa'
+      kernelsu_enabled:
+        description: 'Enable KernelSU (是否启用 KernelSU)'
+        required: true
+        type: choice
+        default: 'Yes'
+        options:
+          - 'Yes'
+          - 'No'
+      compiled_system:
+        description: 'Compiled system type (适用系统类型)'
+        required: true
+        type: choice
+        default: 'MIUI'
+        options:
+          - 'MIUI'
+          - 'AOSP'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📦 Setting up build environment
+        run: |
+          sudo apt update && sudo apt install -y \
+            build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+
+      - name: ♻️ Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache_mikernel
+          key: ccache-${{ github.event.inputs.target_device }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ github.event.inputs.target_device }}-
+            ccache-
+
+      - name: 📥 Cache toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: $HOME/proton-clang
+          key: toolchain-proton-clang
+          restore-keys: |
+            toolchain-
+
+      - name: 📥 Download Proton Clang toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p $HOME/proton-clang
+          cd $HOME/proton-clang
+          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/tags/20210522.zip
+          unzip 20210522.zip
+          cd ~
+
+      - name: 📥 Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: weekdaycare/kernel_xiaomi_sm8250_mod
+          path: kernel_source
+
+      - name: 🧮 Show ccache stats (before build)
+        run: ccache -s || true
+
+      - name: 🔨 Build kernel
+        run: |
+          cd kernel_source
+          chmod +x build.sh
+          TARGET_DEVICE="${{ github.event.inputs.target_device }}"
+          KERNELSU_ENABLED="${{ github.event.inputs.kernelsu_enabled }}"
+          if [ "$KERNELSU_ENABLED" == "Yes" ]; then
+            bash build.sh $TARGET_DEVICE ksu
+          else
+            bash build.sh $TARGET_DEVICE
+          fi
+          echo "✅ Kernel build complete."
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: kernel_source/*.zip
+          
+      - name: 🧮 Show ccache stats (after build)
+        run: ccache -s || true
+        
+      - name: 🚀 Release kernel zip
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kernel-${{ github.run_id }}-${{ github.event.inputs.target_device }}
+          name: "Kernel Build ${{ github.run_id }} for ${{ github.event.inputs.target_device }}"
+          body: |
+            ## Information
+            - 设备: ${{ github.event.inputs.target_device }}
+            - KSU: ${{ github.event.inputs.kernelsu_enabled }}
+            - 构建ID: ${{ github.run_id }}
+
+            ## Install
+            - 下载内核安装包
+            - 使用 Kernel Flasher 等软件刷入 AK3 压缩包
+          files: kernel_source/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
